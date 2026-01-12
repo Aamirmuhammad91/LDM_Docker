@@ -1,0 +1,55 @@
+<div class="control-group">
+  <label for="field-notes" class="control-label">Description</label>
+  <div class="controls">
+    <textarea id="field-notes" name="notes" class="form-control" rows="5">{{ data.notes }}</textarea>
+    <button id="annotate-btn" type="button" class="btn btn-sm btn-secondary" style="margin-top: 8px;">Suggest Tags</button>
+  </div>
+</div>
+
+<style>
+  #s2id_field-tag_string .select2-choices {
+    flex-wrap: wrap;
+    max-height: none;
+    white-space: normal;
+  }
+</style>
+
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    const button = document.getElementById('annotate-btn');
+    const notes = document.getElementById('field-notes');
+    const tagInput = document.getElementById('field-tag_string');
+
+    if (!button || !notes || !tagInput) return;
+
+    button.addEventListener('click', function () {
+      const text = notes.value;
+
+      fetch("https://service.tib.eu/sandbox/nfdi4energyannotator/annotate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Accept": "application/json"
+        },
+        body: JSON.stringify({
+          text: text,
+          ontology_ids: ["oeo"],
+          max_depth: 0
+        })
+      })
+      .then(response => response.json())
+      .then(data => {
+        const matches = [...new Set(data.matches.map(m => m.label))];
+
+        if (!matches.length) {
+          alert('No tags suggested.');
+          return;
+        }
+
+        tagInput.value = matches.join(', ');
+        tagInput.dispatchEvent(new Event('change'));
+      })
+      .catch(error => alert("Annotation error: " + error));
+    });
+  });
+</script>
