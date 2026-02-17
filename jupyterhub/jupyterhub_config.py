@@ -9,6 +9,8 @@ import re
 import asyncio
 from traitlets import Unicode
 import docker
+import io
+import tarfile
 
 api_token = os.getenv('JUPYTERHUB_API_TOKEN')
 
@@ -83,6 +85,39 @@ c.DockerSpawner.stop = True
 class GuestDockerSpawner(DockerSpawner):
 
     user_list = get_guest_list(os.getenv('CKAN_JUPYTERHUB_USER'))
+
+    async def _seed_volume(self, volume_name, notebook_name):
+        client = docker.from_env()
+        client.images.pull("busybox:1.36")
+
+        src_file_in_manager = os.path.join(os.getenv('CKAN_STORAGE_PATH', '/var/lib/ckan'), 'notebook', notebook_name)
+        # src_file_in_manager = f"/ckan_storage/notebook/{notebook_name}"
+        init = client.containers.create(
+            image="busybox:1.36",
+            command="sleep 120",
+            mounts=[docker.types.Mount(target=self.notebook_dir, source=volume_name, type="volume")],
+        )
+        init.start()
+        try:
+            init.exec_run(f"mkdir -p {self.notebook_dir}")
+
+            filename = os.path.basename(src_file_in_manager)
+
+            buf = io.BytesIO()
+            with tarfile.open(fileobj=buf, mode="w") as tar:
+                with open(src_file_in_manager, "rb") as f:
+                    data = f.read()
+                info = tarfile.TarInfo(name=filename)
+                info.size = len(data)
+                info.mode = 0o644
+                info.mtime = os.path.getmtime(src_file_in_manager)
+                tar.addfile(info, io.BytesIO(data))
+            buf.seek(0)
+
+            init.put_archive(self.notebook_dir, buf.getvalue())
+        finally:
+            init.remove(force=True)
+
     async def start(self):
         if self.user.name in self.user_list:
             self.log.info(f"Creating docker for {self.user.name}")
@@ -115,12 +150,13 @@ class GuestDockerSpawner(DockerSpawner):
                         notebook_name = match.group(1)
                         self.log.info(f"Found notebook name: {notebook_name}")
 
+            # Copy notebooks from source volume
+            if notebook_name is not None:
+                await self._seed_volume(volume_name, notebook_name)
+                self.log.error(f'I copied the notebook for {self.user.name}')
+
             # Start the user container
             container = await super().start()
-
-            # Copy notebooks from source volume
-            await self._copy_notebooks(volume_name, notebook_name)
-
             return container
         else:
             # Default behavior for non-guest users
@@ -129,42 +165,6 @@ class GuestDockerSpawner(DockerSpawner):
                 'mode': 'ro',
             }
             return await super().start()
-
-    async def _copy_notebooks(self, volume_name, notebook_name=None):
-        """Copy notebooks from source volume to user volume"""
-        source_volume = os.getenv('CKAN_STORAGE_NOTEBOOK', '/data/notebooks')
-
-        try:
-            client = docker.from_env()
-
-            # Command to copy either specific notebook or all notebooks
-            if notebook_name:
-                copy_cmd = f'mkdir -p /target && cp -R /source/{notebook_name} /target/ 2>/dev/null || echo "File not found" && chown -R 1000:100 /target'
-            else:
-                copy_cmd = 'mkdir -p /target && cp -R /source/* /target/ 2>/dev/null || echo "No files to copy" && chown -R 1000:100 /target'
-
-            # Run a temporary container to copy files
-            temp_container = client.containers.run(
-                "alpine:latest",
-                f"sh -c '{copy_cmd}'",
-                volumes={
-                    source_volume: {"bind": "/source", "mode": "ro"},
-                    volume_name: {"bind": "/target", "mode": "rw"}
-                },
-                remove=True,
-                detach=True,
-                network=self.network_name
-            )
-
-            # Check results
-            result = temp_container.wait()
-            if result['StatusCode'] != 0:
-                self.log.error(f"File copy failed: {temp_container.logs().decode('utf-8')}")
-            else:
-                self.log.info("Files copied successfully")
-
-        except Exception as e:
-            self.log.error(f"Error during file copy: {str(e)}")
 
 
 c.JupyterHub.spawner_class = GuestDockerSpawner

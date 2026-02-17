@@ -102,39 +102,55 @@ def update_env_variable(updates):
 
 
 def copy_notebook_to_container(username, notebook_name):
-    """Copy a specific notebook to an existing user's volume"""
+    """Copy a specific notebook to an existing user's volume using tar archive"""
     try:
         import docker
+        import io
+        import tarfile
+        
         client = docker.from_env()
+        client.images.pull("busybox:1.36")
 
-        # Define volume names
-        source_volume = os.getenv('CKAN_STORAGE_NOTEBOOK', '/data/notebooks')
+        # Define volume and paths
         volume_name = f"jupyterhub-{username}"
+        notebook_dir = '/home/jovyan/work'
+        src_file_in_manager = os.path.join(os.getenv('CKAN_STORAGE_PATH', '/var/lib/ckan'), 'notebook', notebook_name)
 
-        # Command to copy the specific notebook
-        copy_cmd = f'mkdir -p /target && cp -R /source/{notebook_name} /target/ 2>/dev/null || echo "File not found" && chown -R 1000:100 /target'
-
-        # Run a temporary container to copy files
-        temp_container = client.containers.run(
-            "alpine:latest",
-            f"sh -c '{copy_cmd}'",
-            volumes={
-                source_volume: {"bind": "/source", "mode": "ro"},
-                volume_name: {"bind": "/target", "mode": "rw"}
-            },
-            remove=True,
-            detach=True,
-            network=os.getenv('CKAN_NETWORK')
+        # Create temporary container with the volume mounted
+        init = client.containers.create(
+            image="busybox:1.36",
+            command="sleep 120",
+            mounts=[docker.types.Mount(target=notebook_dir, source=volume_name, type="volume")],
         )
+        init.start()
+        
+        try:
+            # Create directory structure
+            init.exec_run(f"mkdir -p {notebook_dir}")
 
-        # Check results
-        result = temp_container.wait()
-        if result['StatusCode'] != 0:
-            log.error(f"File copy failed: {temp_container.logs().decode('utf-8')}")
-            return False
-        else:
+            # Get filename
+            filename = os.path.basename(src_file_in_manager)
+
+            # Create tar archive in memory
+            buf = io.BytesIO()
+            with tarfile.open(fileobj=buf, mode="w") as tar:
+                with open(src_file_in_manager, "rb") as f:
+                    data = f.read()
+                info = tarfile.TarInfo(name=filename)
+                info.size = len(data)
+                info.mode = 0o644
+                info.mtime = os.path.getmtime(src_file_in_manager)
+                tar.addfile(info, io.BytesIO(data))
+            buf.seek(0)
+
+            # Copy file to container
+            init.put_archive(notebook_dir, buf.getvalue())
+            
             log.info(f"Notebook {notebook_name} copied successfully to {username}'s container")
             return True
+            
+        finally:
+            init.remove(force=True)
 
     except Exception as e:
         log.error(f"Error during notebook copy: {str(e)}")
