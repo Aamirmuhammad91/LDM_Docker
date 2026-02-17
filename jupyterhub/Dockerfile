@@ -3,12 +3,12 @@ ARG CKAN_STORAGE_PATH
 ARG CKAN_SITE_URL
 
 RUN pip install --no-cache \
-    oauthenticator \
-    dockerspawner \
-    jupyterhub-nativeauthenticator \
-    jupyterhub-idle-culler \
-    flask \
-	docker
+    oauthenticator==17.3.0 \
+    dockerspawner==14.0.0 \
+    jupyterhub-nativeauthenticator==1.3.0 \
+    jupyterhub-idle-culler==1.4.0 \
+    flask==3.1.2 \
+    docker==7.1.0
 
 COPY jupyterhub_config.py /srv/jupyterhub/jupyterhub_config.py
 COPY jupyterhub_api.py /srv/jupyterhub/jupyterhub_api.py
