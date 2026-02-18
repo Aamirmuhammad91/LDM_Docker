@@ -114,9 +114,8 @@ services:
     image: my_jupyterhub
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - ./jupyterhub/jupyterhub_config.py:/srv/jupyterhub/jupyterhub_config.py
       - jupyterhub_data:/srv/jupyterhub/data
-      - ckan_storage:${CKAN_STORAGE_PATH}:rw
+      - ckan_storage:${CKAN_STORAGE_PATH}:ro
     ports:
       - "8000:8000"
       - "6000:6000"
