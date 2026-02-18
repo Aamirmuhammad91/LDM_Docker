@@ -232,7 +232,7 @@ if api_url:
         'name': 'volume-cleaner',
         'command': [
             'sh', '-c',
-            f'while true; do sleep 60; curl -X POST -s {api_url}/cleanup_volumes > /dev/null; done'
+            f"while true; do sleep 60; curl -X POST -H 'X-API-Key: {api_token}' -s {api_url}/cleanup_volumes > /dev/null; done"
         ],
     })
 else:

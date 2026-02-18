@@ -7,10 +7,11 @@ Provides REST endpoints for managing JupyterHub guest users and operations.
 
 
 import logging
-
-from flask import Flask, jsonify, request
+import os
+from functools import wraps
 
 import jupyterhub_api.api as hub_api
+from flask import Flask, jsonify, request, abort
 
 logging.basicConfig(
     level=logging.INFO,
@@ -19,6 +20,23 @@ logging.basicConfig(
 log = logging.getLogger(__name__)
 
 app = Flask(__name__)
+
+API_KEY = os.getenv('JUPYTERHUB_API_TOKEN')
+
+
+def require_api_key(f):
+    """
+    Decorator to require API key authentication if configured.
+    """
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if API_KEY:
+            provided_key = request.headers.get('X-API-Key') or request.args.get('api_key')
+            if provided_key != API_KEY:
+                log.warning(f"Unauthorized API access attempt from {request.remote_addr}")
+                abort(401, description="Invalid or missing API key")
+        return f(*args, **kwargs)
+    return decorated_function
 
 
 def create_response(data=None, error=None, status_code=200):
@@ -44,6 +62,7 @@ def create_response(data=None, error=None, status_code=200):
 
 
 @app.route('/get_user', methods=['GET'])
+@require_api_key
 def get_user():
     """
     Get an available guest user.
@@ -71,6 +90,7 @@ def get_user():
 
 
 @app.route('/running_user', methods=['GET'])
+@require_api_key
 def running_users():
     """
     Get list of users with running servers.
@@ -87,6 +107,7 @@ def running_users():
 
 
 @app.route('/restart_jupyterhub', methods=['GET'])
+@require_api_key
 def restart_jupyterhub():
     """
     Restart the JupyterHub service.
@@ -112,6 +133,7 @@ def restart_jupyterhub():
 
 
 @app.route('/update_env', methods=['POST'])
+@require_api_key
 def update_env():
     """
     Update environment variables.
@@ -154,6 +176,7 @@ def update_env():
 
 
 @app.route('/copy_notebook', methods=['POST'])
+@require_api_key
 def copy_notebook():
     """
     Copy a notebook to a user's container.
@@ -213,6 +236,7 @@ def copy_notebook():
 
 
 @app.route('/cleanup_volumes', methods=['POST'])
+@require_api_key
 def cleanup_volumes():
     """
     Clean up unused Docker volumes for guest users.
