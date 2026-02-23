@@ -1,0 +1,8 @@
+volumes:
+  ckan_home:
+
+services:
+  ckan:
+    volumes:
+      - ckan_home:${CKAN_HOME}
+

@@ -3,7 +3,6 @@ version: "3"
 
 volumes:
   ckan_config:
-  ckan_home:
   ckan_storage:
   pg_data:
   solr_data:
@@ -16,10 +15,8 @@ services:
     restart: unless-stopped
     image: ckan
     build:
-      context: ./
+      context: .
       args:
-          - CKAN_SITE_URL=${CKAN_SITE_URL}
-          - CKAN_JUPYTERNOTEBOOK_URL=${CKAN_JUPYTERNOTEBOOK_URL}
           - CKAN_CONFIG_L=${CKAN_CONFIG}
           - CKAN_HOME_L=${CKAN_HOME}
           - CKAN_STORAGE_PATH_L=${CKAN_STORAGE_PATH}
@@ -46,7 +43,6 @@ services:
 
     volumes:
       - ckan_config:${CKAN_CONFIG}
-      - ckan_home:${CKAN_HOME}
       - ckan_storage:${CKAN_STORAGE_PATH}
     networks:
       - ldmnetwork
