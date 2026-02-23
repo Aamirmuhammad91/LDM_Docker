@@ -1,5 +1,10 @@
 volumes:
   ckan_home:
+    driver: local
+    driver_opts:
+      type: 'none'
+      o: 'bind'
+      device: './docker_volumes/ckan_home'
 
 services:
   ckan:
