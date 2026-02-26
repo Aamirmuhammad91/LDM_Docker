@@ -18,7 +18,7 @@ dataset_fields:
 
 - field_name: notes
   label: Description
-  form_snippet: markdown.html
+  form_snippet: annotator_markdown.html
   form_placeholder: eg. Some useful notes about the data
 
 - field_name: tag_string

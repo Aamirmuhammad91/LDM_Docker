@@ -1,0 +1,111 @@
+{#
+  Annotator-enhanced markdown snippet for scheming.
+  This re-uses the existing markdown editor (keeps markdown functionality)
+  and adds a small, non-fragile 'Suggest Tags' button which calls an
+  annotation API and merges returned labels into the tags field.
+#}
+
+<div class="control-group annotator-container">
+  <div class="controls">
+    {# include the existing markdown editor #}
+    {% include 'scheming/form_snippets/markdown.html' %}
+
+    <div class="annotator-actions">
+      <button id="clear-tags-btn" type="button" class="btn btn-sm btn-default" style="margin-right: 8px;">
+        <i class="fa fa-eraser"></i> Clear Tags
+      </button>
+
+      <button id="annotate-btn" type="button" class="btn btn-sm btn-primary">
+        <span id="btn-text">Suggest Tags</span>
+        <span id="btn-loader" style="display: none;">
+           <i class="fa fa-spinner fa-spin"></i> Fetching...
+        </span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<style>
+ 
+  .annotator-actions {
+    margin-top: 5px; 
+    display: flex;
+    justify-content: flex-end;
+  }
+
+  /* Ensure the tags box doesn't grow infinitely */
+  #s2id_field-tag_string .select2-choices {
+    max-height: 60px;
+    overflow-y: auto;
+  }
+</style>
+
+<script>
+(function() {
+  // We wait for the page to load so the Markdown editor is ready
+  window.addEventListener('load', function() {
+    
+    // 1. Identify all the elements we need
+    const btn = document.getElementById('annotate-btn');
+    const clearBtn = document.getElementById('clear-tags-btn');
+    const loader = document.getElementById('btn-loader');
+    const btnText = document.getElementById('btn-text');
+    
+    const notesField = document.querySelector('textarea[name="notes"]');
+    const tagField = document.querySelector('input[name="tag_string"], textarea[name="tag_string"]');
+
+    // 2. Function to get text (works for both normal boxes and Markdown editors)
+    function getTextContent() {
+      const cmEl = document.querySelector('.CodeMirror');
+      return (cmEl && cmEl.CodeMirror) ? cmEl.CodeMirror.getValue() : notesField.value;
+    }
+
+    // 3. Clear Tags Logic
+    clearBtn.addEventListener('click', function() {
+      tagField.value = '';
+      tagField.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+
+    // 4. Suggest Tags Logic
+    btn.addEventListener('click', function() {
+      const text = getTextContent().trim();
+
+      // Validation check
+      if (!text) {
+        alert('Please provide some description to suggest tags.');
+        return;
+      }
+
+      // Show loading state
+      btnText.style.display = 'none';
+      loader.style.display = 'inline-block';
+
+      // API Request
+      fetch('https://service.tib.eu/sandbox/nfdi4energyannotator/annotate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: text, ontology_ids: ['oeo'], max_depth: 0 })
+      })
+      .then(r => r.json())
+      .then(data => {
+        const labels = data.matches ? data.matches.map(m => m.label) : [];
+        const uniqueLabels = Array.from(new Set(labels)).filter(Boolean);
+
+        if (uniqueLabels.length === 0) {
+          alert('No tags suggested.');
+        } else {
+          // Replace old tags with new ones
+          tagField.value = uniqueLabels.join(', ');
+          tagField.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+      })
+      .catch(err => alert('Error fetching tags.'))
+      .finally(() => {
+        // Hide loading state
+        btnText.style.display = 'inline-block';
+        loader.style.display = 'none';
+      });
+    });
+  });
+})();
+</script>
